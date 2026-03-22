@@ -7,8 +7,9 @@ const menu = [
   { label: 'Meu Dia', icon: '☀', href: '/meu-dia' },
   { label: 'Clientes', icon: '👥', href: '/clientes' },
   { label: 'Demandas', icon: '✓', href: '/demandas' },
-  { label: 'Calendário', icon: '▦', href: '/calendario', soon: true },
+  { label: 'Content Board', icon: '◈', href: '/cobo' },
   { label: 'Modelagem', icon: '◎', href: '/modelagem', soon: true },
+  { label: 'Calendário', icon: '▦', href: '/calendario', soon: true },
   { label: 'Métricas', icon: '↗', href: '/metricas', soon: true },
 ]
 
