@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { supabase } from './lib/supabase'
+import { supabase } from '../lib/supabase'
 import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
@@ -42,18 +42,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0ece8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div style={{ minHeight: '100vh', background: '#faf8f6', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ width: '100%', maxWidth: 420 }}>
 
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{ fontSize: 36, fontWeight: 300, color: '#011d47', letterSpacing: '-1px', lineHeight: 1 }}>zeronze</div>
-          <div style={{ fontSize: 10, color: '#011d47', fontWeight: 600, letterSpacing: 3, marginTop: 2, opacity: 0.6 }}>SISTEMA DE GESTÃO</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: '#1a3c34', letterSpacing: '-0.5px' }}>ZERONZE</div>
+          <div style={{ fontSize: 13, color: '#c9a89a', fontWeight: 500, letterSpacing: 2, marginTop: 2 }}>SISTEMA OPERACIONAL</div>
         </div>
 
         {/* Card */}
-        <div style={{ background: 'white', borderRadius: 16, padding: 40, boxShadow: '0 4px 24px rgba(1,29,71,0.08)' }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#011d47', marginBottom: 8 }}>
+        <div style={{ background: 'white', borderRadius: 16, padding: 40, boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a3c34', marginBottom: 8 }}>
             {mode === 'login' ? 'Bem-vinda de volta' : 'Criar conta'}
           </h2>
           <p style={{ fontSize: 14, color: '#666', marginBottom: 28 }}>
@@ -62,31 +62,31 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#011d47', marginBottom: 6 }}>E-mail</label>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1a3c34', marginBottom: 6 }}>E-mail</label>
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
                 placeholder="seu@email.com"
-                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e0ddd9', borderRadius: 8, fontSize: 14, outline: 'none', background: '#f0ece8' }}
+                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e0e0e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}
               />
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#011d47', marginBottom: 6 }}>Senha</label>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1a3c34', marginBottom: 6 }}>Senha</label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
-                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e0ddd9', borderRadius: 8, fontSize: 14, outline: 'none', background: '#f0ece8' }}
+                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e0e0e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}
               />
             </div>
 
             {error && (
-              <div style={{ background: error.includes('criada') ? '#e8ecf3' : '#fdf0ee', border: `1.5px solid ${error.includes('criada') ? '#011d47' : '#c9a89a'}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: error.includes('criada') ? '#011d47' : '#8b4a3a', marginBottom: 16 }}>
+              <div style={{ background: error.includes('criada') ? '#e8f0ee' : '#fdf0ee', border: `1px solid ${error.includes('criada') ? '#1a3c34' : '#c9a89a'}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: error.includes('criada') ? '#1a3c34' : '#8b4a3a', marginBottom: 16 }}>
                 {error}
               </div>
             )}
@@ -94,7 +94,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              style={{ width: '100%', padding: '12px', background: loading ? '#ccc' : '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: 0.3 }}
+              style={{ width: '100%', padding: '12px', background: loading ? '#ccc' : '#1a3c34', color: 'white', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer' }}
             >
               {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar conta'}
             </button>
@@ -103,7 +103,7 @@ export default function LoginPage() {
           <div style={{ textAlign: 'center', marginTop: 20 }}>
             <button
               onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}
-              style={{ background: 'none', border: 'none', fontSize: 13, color: '#011d47', cursor: 'pointer', fontWeight: 500, opacity: 0.5 }}
+              style={{ background: 'none', border: 'none', fontSize: 13, color: '#c9a89a', cursor: 'pointer', fontWeight: 500 }}
             >
               {mode === 'login' ? 'Primeiro acesso? Criar senha' : 'Já tenho conta — entrar'}
             </button>
