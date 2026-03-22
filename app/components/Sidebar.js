@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 
 const menu = [
   { label: 'Início', icon: '⊞', href: '/dashboard' },
+  { label: 'Meu Dia', icon: '☀', href: '/meu-dia' },
   { label: 'Clientes', icon: '👥', href: '/clientes' },
   { label: 'Demandas', icon: '✓', href: '/demandas' },
   { label: 'Calendário', icon: '▦', href: '/calendario', soon: true },
