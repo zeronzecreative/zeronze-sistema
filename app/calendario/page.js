@@ -5,7 +5,6 @@ import { supabase } from '../lib/supabase'
 import Sidebar from '../components/Sidebar'
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-const DIAS_SEMANA_LABEL = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 const DIAS_SEMANA_MAP = { 'Segunda': 1, 'Terça': 2, 'Quarta': 3, 'Quinta': 4, 'Sexta': 5, 'Sábado': 6, 'Domingo': 0 }
 const MODELAGEM_TIPOS = {
   hero: { label: 'Hero', color: '#011d47', bg: '#eff6ff' },
@@ -24,11 +23,11 @@ export default function CalendarioPage() {
   const [itens, setItens] = useState([])
   const [redes, setRedes] = useState([])
   const [gerando, setGerando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
   const [itemSelecionado, setItemSelecionado] = useState(null)
   const [showFormAvulso, setShowFormAvulso] = useState(false)
   const [diaSelecionado, setDiaSelecionado] = useState(null)
   const [formAvulso, setFormAvulso] = useState({ conteudo_nome: '', assunto: '', formato: '', horario: '', rede_social_id: '', modelagem_tipo: '', conversao: '' })
-  const [salvando, setSalvando] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -68,8 +67,6 @@ export default function CalendarioPage() {
   async function gerarCalendario() {
     if (!clienteSelecionado) return
     setGerando(true)
-
-    // Busca todas as modelagens do cliente para o mês
     const { data: modelagens } = await supabase
       .from('modelagem')
       .select('*, redes_sociais(plataforma)')
@@ -83,12 +80,10 @@ export default function CalendarioPage() {
       return
     }
 
-    // Remove itens gerados pela modelagem (mantém avulsos)
     const inicio = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
     const fim = `${ano}-${String(mes + 1).padStart(2, '0')}-${new Date(ano, mes + 1, 0).getDate()}`
-    await supabase.from('calendario').delete()
+   await supabase.from('calendario').delete()
       .eq('cliente_id', clienteSelecionado.id)
-      .eq('origem', 'modelagem')
       .gte('data', inicio)
       .lte('data', fim)
 
@@ -96,17 +91,15 @@ export default function CalendarioPage() {
     const novosItens = []
 
     for (const mod of modelagens) {
-      // Busca slots da modelagem
       const { data: slots } = await supabase
         .from('modelagem_slots')
         .select('*, cobo_formatos(nome)')
         .eq('modelagem_id', mod.id)
         .eq('dia_respiro', false)
-
+      .not('cobo_formato_id', 'is', null)
       if (!slots || slots.length === 0) continue
 
       if (mod.modo === 'dias_semana') {
-        // Para cada slot, encontra todos os dias do mês que batem com o dia da semana
         for (const slot of slots) {
           const diaSemana = DIAS_SEMANA_MAP[slot.slot]
           if (diaSemana === undefined) continue
@@ -131,8 +124,6 @@ export default function CalendarioPage() {
           }
         }
       } else {
-        // Modo número de posts — matriz semanal
-        // Ordena slots por dia da semana
         const ordemDias = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']
         const slotsOrdenados = [...slots].sort((a, b) => {
           const diaA = ordemDias.indexOf(a.slot)
@@ -141,25 +132,17 @@ export default function CalendarioPage() {
           return parseInt(a.slot) - parseInt(b.slot)
         })
 
-        // Encontra todas as semanas do mês
-        // Semana começa na segunda
         const primeiroMes = new Date(ano, mes, 1)
         const semanas = []
         let diaAtual = new Date(ano, mes, 1)
-
-        // Vai para a primeira segunda-feira
         while (diaAtual.getDay() !== 1) {
           diaAtual = new Date(diaAtual.getTime() + 86400000)
           if (diaAtual.getMonth() !== mes) break
         }
-
-        // Coleta todas as semanas
         while (diaAtual.getMonth() === mes) {
           semanas.push(new Date(diaAtual))
           diaAtual = new Date(diaAtual.getTime() + 7 * 86400000)
         }
-
-        // Se o mês começa antes da primeira segunda, adiciona uma semana extra no início
         if (primeiroMes.getDay() !== 1) {
           let inicioSemana = new Date(primeiroMes)
           while (inicioSemana.getDay() !== 1) {
@@ -170,16 +153,13 @@ export default function CalendarioPage() {
           }
         }
 
-        // Para cada semana, distribui os posts
         for (const inicioSemana of semanas) {
           for (const slot of slotsOrdenados) {
             const diaSemana = DIAS_SEMANA_MAP[slot.slot]
             if (diaSemana === undefined) continue
             const dataPost = new Date(inicioSemana)
-            // Calcula o dia da semana correto
-            const diffDias = (diaSemana - 1 + 7) % 7 // Segunda = 0
+            const diffDias = (diaSemana - 1 + 7) % 7
             dataPost.setDate(inicioSemana.getDate() + diffDias)
-            // Só adiciona se for do mês correto
             if (dataPost.getMonth() === mes && dataPost.getFullYear() === ano) {
               novosItens.push({
                 cliente_id: clienteSelecionado.id,
@@ -201,16 +181,47 @@ export default function CalendarioPage() {
       }
     }
 
-    // Insere em lotes
     if (novosItens.length > 0) {
       const loteSize = 50
       for (let i = 0; i < novosItens.length; i += loteSize) {
         await supabase.from('calendario').insert(novosItens.slice(i, i + loteSize))
       }
     }
-
     await carregarCalendario(clienteSelecionado.id, mes, ano)
     setGerando(false)
+  }
+
+async function criarDemandas() {
+    if (!clienteSelecionado || itens.length === 0) return
+    setSalvando(true)
+    let criadas = 0
+    for (const item of itens) {
+      // Verifica se já existe demanda para este item do calendário
+      const { data: existe } = await supabase
+        .from('demandas')
+        .select('id')
+        .eq('calendario_id', item.id)
+        .maybeSingle()
+      if (!existe) {
+        await supabase.from('demandas').insert({
+          cliente_id: clienteSelecionado.id,
+          rede_social_id: item.rede_social_id || null,
+          calendario_id: item.id,
+          origem: 'calendario',
+          tipo: item.formato || '',
+          tema: item.conteudo_nome || '',
+          prazo: item.data,
+          status: 'a_fazer',
+          modelagem: item.modelagem_tipo || '',
+          permeabilidade: item.permeabilidade || '',
+          conversao_esperada: item.conversao || '',
+          comentarios: item.assunto || '',
+        })
+        criadas++
+      }
+    }
+    alert(`${criadas} demanda${criadas !== 1 ? 's' : ''} criada${criadas !== 1 ? 's' : ''}!`)
+    setSalvando(false)
   }
 
   async function salvarAssunto(itemId, assunto) {
@@ -218,15 +229,33 @@ export default function CalendarioPage() {
     setItens(prev => prev.map(i => i.id === itemId ? { ...i, assunto } : i))
   }
 
-  async function salvarAvulso() {
+async function salvarAvulso() {
     if (!diaSelecionado || !formAvulso.conteudo_nome.trim()) return
     setSalvando(true)
-    await supabase.from('calendario').insert({
+    
+    // Salva no calendário
+    const { data: itemCalendario } = await supabase.from('calendario').insert({
       ...formAvulso,
       cliente_id: clienteSelecionado.id,
       data: diaSelecionado,
       origem: 'avulso',
-    })
+    }).select().single()
+
+    // Cria demanda automaticamente
+    if (itemCalendario) {
+      await supabase.from('demandas').insert({
+        cliente_id: clienteSelecionado.id,
+        rede_social_id: formAvulso.rede_social_id || null,
+        calendario_id: itemCalendario.id,
+        origem: 'avulso',
+        tipo: formAvulso.formato || '',
+        tema: formAvulso.conteudo_nome,
+        prazo: diaSelecionado,
+        status: 'a_fazer',
+        comentarios: formAvulso.assunto || '',
+      })
+    }
+
     await carregarCalendario(clienteSelecionado.id, mes, ano)
     setShowFormAvulso(false)
     setFormAvulso({ conteudo_nome: '', assunto: '', formato: '', horario: '', rede_social_id: '', modelagem_tipo: '', conversao: '' })
@@ -247,14 +276,11 @@ export default function CalendarioPage() {
     if (clienteSelecionado) carregarCalendario(clienteSelecionado.id, novoMes, novoAno)
   }
 
-  // Gera grid do calendário
   const diasNoMes = new Date(ano, mes + 1, 0).getDate()
-  const primeiroDia = new Date(ano, mes, 1).getDay() // 0=Dom
+  const primeiroDia = new Date(ano, mes, 1).getDay()
   const celulas = []
-  // Dias vazios antes do 1
   for (let i = 0; i < primeiroDia; i++) celulas.push(null)
   for (let d = 1; d <= diasNoMes; d++) celulas.push(d)
-  // Completa última semana
   while (celulas.length % 7 !== 0) celulas.push(null)
 
   function getItensDia(dia) {
@@ -269,7 +295,6 @@ export default function CalendarioPage() {
   }
 
   if (!user) return null
-
   const temCalendario = itens.length > 0
 
   return (
@@ -284,10 +309,20 @@ export default function CalendarioPage() {
             <h1 style={{ fontSize: 26, fontWeight: 700, color: '#011d47' }}>Calendário Editorial</h1>
             <p style={{ fontSize: 14, color: '#6b7280', marginTop: 4 }}>Planejamento de conteúdo por cliente e mês.</p>
           </div>
-          <button onClick={gerarCalendario} disabled={gerando || !clienteSelecionado}
-            style={{ padding: '10px 20px', background: gerando ? '#94a3b8' : '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: gerando ? 'not-allowed' : 'pointer' }}>
-            {gerando ? 'Gerando...' : temCalendario ? '↺ Regenerar calendário' : '⚡ Gerar calendário'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {temCalendario && (
+              <button onClick={criarDemandas} disabled={salvando}
+                style={{ padding: '10px 20px', background: salvando ? '#94a3b8' : '#065f46', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: salvando ? 'not-allowed' : 'pointer' }}>
+                {salvando ? 'Criando...' : '✓ Criar demandas'}
+              </button>
+            )}
+        {!temCalendario && (
+              <button onClick={gerarCalendario} disabled={gerando || !clienteSelecionado}
+                style={{ padding: '10px 20px', background: gerando ? '#94a3b8' : '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: gerando ? 'not-allowed' : 'pointer' }}>
+                {gerando ? 'Gerando...' : '⚡ Gerar calendário'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Seletor cliente */}
@@ -300,7 +335,7 @@ export default function CalendarioPage() {
           ))}
         </div>
 
-        {/* Controles mês + legenda redes */}
+        {/* Controles mês + legenda */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={() => { const d = new Date(ano, mes - 1, 1); mudarMes(d.getMonth(), d.getFullYear()) }}
@@ -309,7 +344,6 @@ export default function CalendarioPage() {
             <button onClick={() => { const d = new Date(ano, mes + 1, 1); mudarMes(d.getMonth(), d.getFullYear()) }}
               style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid #e8e4e0', background: 'white', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
           </div>
-          {/* Legenda redes */}
           <div style={{ display: 'flex', gap: 12 }}>
             {redes.map((r, i) => (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -322,7 +356,6 @@ export default function CalendarioPage() {
 
         {/* Grid calendário */}
         <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e8e4e0', overflow: 'hidden' }}>
-          {/* Cabeçalho dias da semana */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1.5px solid #e8e4e0' }}>
             {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => (
               <div key={d} style={{ padding: '10px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: 0.5, borderRight: '1px solid #f0ece8' }}>
@@ -330,8 +363,6 @@ export default function CalendarioPage() {
               </div>
             ))}
           </div>
-
-          {/* Células */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
             {celulas.map((dia, idx) => {
               const itensDia = getItensDia(dia)
@@ -340,7 +371,7 @@ export default function CalendarioPage() {
               const dataStr = dia ? `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}` : null
 
               return (
-                <div key={idx} style={{ minHeight: 110, borderRight: '1px solid #f0ece8', borderBottom: '1px solid #f0ece8', padding: '8px', background: !dia ? '#faf8f6' : 'white', position: 'relative' }}>
+                <div key={idx} style={{ minHeight: 110, borderRight: '1px solid #f0ece8', borderBottom: '1px solid #f0ece8', padding: '8px', background: !dia ? '#faf8f6' : 'white' }}>
                   {dia && (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -348,15 +379,14 @@ export default function CalendarioPage() {
                           {dia}
                         </span>
                         <button onClick={() => { setDiaSelecionado(dataStr); setShowFormAvulso(true) }}
-                          style={{ width: 18, height: 18, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14, color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
-                          title="Adicionar item avulso">+</button>
+                          style={{ width: 18, height: 18, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14, color: '#d1d5db' }}>+</button>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                         {itensDia.map(item => (
                           <div key={item.id} onClick={() => setItemSelecionado(item)}
                             style={{ padding: '3px 6px', borderRadius: 4, background: getCorRede(item.rede_social_id) + '18', borderLeft: `3px solid ${getCorRede(item.rede_social_id)}`, cursor: 'pointer', fontSize: 10, color: '#374151', lineHeight: 1.3 }}>
                             <div style={{ fontWeight: 600, color: getCorRede(item.rede_social_id), fontSize: 9 }}>
-                              {item.redes_sociais?.plataforma} {item.horario && `· ${item.horario}`}
+                              {item.redes_sociais?.plataforma}{item.horario && ` · ${item.horario}`}
                             </div>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>
                               {item.assunto || item.conteudo_nome || 'Sem título'}
@@ -391,7 +421,7 @@ export default function CalendarioPage() {
         )}
       </main>
 
-      {/* Painel detalhe item */}
+      {/* Painel detalhe */}
       {itemSelecionado && (
         <div style={{ width: 380, minHeight: '100vh', background: 'white', borderLeft: '1.5px solid #e8e4e0', position: 'fixed', right: 0, top: 0, bottom: 0, overflowY: 'auto', zIndex: 40 }}>
           <div style={{ padding: '20px 24px', borderBottom: '1px solid #f0ece8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -449,7 +479,7 @@ export default function CalendarioPage() {
         </div>
       )}
 
-      {/* Modal item avulso */}
+      {/* Modal avulso */}
       {showFormAvulso && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(1,29,71,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
           onClick={e => { if (e.target === e.currentTarget) setShowFormAvulso(false) }}>

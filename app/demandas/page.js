@@ -48,10 +48,11 @@ export default function DemandasPage() {
   }, [])
 
   async function carregarDemandas() {
-    const { data } = await supabase
+const { data } = await supabase
       .from('demandas')
-      .select('*, clientes(nome), usuarios(nome)')
+      .select('*, clientes(nome), usuarios(nome), redes_sociais(plataforma)')
       .order('criado_em', { ascending: false })
+      .limit(500)
     setDemandas(data || [])
     setLoading(false)
   }
@@ -193,6 +194,8 @@ export default function DemandasPage() {
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#011d47' }}>{d.tema || 'Sem título'}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    {d.redes_sociais?.plataforma && <span style={{ fontSize: 11, fontWeight: 600, color: '#011d47', background: '#eff6ff', padding: '2px 8px', borderRadius: 4 }}>{d.redes_sociais.plataforma}</span>}
+
                     {d.tipo && <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 8px', borderRadius: 4 }}>{d.tipo}</span>}
                     {d.modelagem && MODELAGEM[d.modelagem] && (
                       <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 4, background: MODELAGEM[d.modelagem].bg, color: MODELAGEM[d.modelagem].color }}>{MODELAGEM[d.modelagem].label}</span>
