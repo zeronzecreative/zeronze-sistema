@@ -10,7 +10,7 @@ const menu = [
   { label: 'Content Board', icon: '◈', href: '/cobo' },
   { label: 'Modelagem', icon: '◎', href: '/modelagem' },
   { label: 'Calendário', icon: '▦', href: '/calendario' },
-  { label: 'Métricas', icon: '↗', href: '/metricas', soon: true },
+  { label: 'Métricas', icon: '↗', href: '/metricas' },
 ]
 
 export default function Sidebar({ user }) {
