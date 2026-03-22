@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --azul: #011d47;
-  --azul-medio: #0a2d6e;
-  --azul-claro: #e8ecf3;
+  --azul-hover: #022560;
   --offwhite: #f0ece8;
-  --cinza: #666666;
-  --cinza-claro: #e0ddd9;
-  --preto: #1a1a1a;
+  --branco: #ffffff;
+  --cinza-borda: #e8e4e0;
+  --cinza-texto: #6b7280;
+  --cinza-claro: #f7f5f3;
 }
 
 body {
-  background-color: var(--offwhite);
-  color: var(--preto);
-  font-family: 'Inter', sans-serif;
+  background: var(--offwhite);
+  color: var(--azul);
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
 }
+
+input, select, textarea, button { font-family: inherit; }
