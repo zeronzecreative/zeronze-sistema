@@ -80,13 +80,6 @@ export default function CalendarioPage() {
       return
     }
 
-    const inicio = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
-    const fim = `${ano}-${String(mes + 1).padStart(2, '0')}-${new Date(ano, mes + 1, 0).getDate()}`
-   await supabase.from('calendario').delete()
-      .eq('cliente_id', clienteSelecionado.id)
-      .gte('data', inicio)
-      .lte('data', fim)
-
     const diasNoMes = new Date(ano, mes + 1, 0).getDate()
     const novosItens = []
 
@@ -96,7 +89,7 @@ export default function CalendarioPage() {
         .select('*, cobo_formatos(nome)')
         .eq('modelagem_id', mod.id)
         .eq('dia_respiro', false)
-      .not('cobo_formato_id', 'is', null)
+        .not('cobo_formato_id', 'is', null)
       if (!slots || slots.length === 0) continue
 
       if (mod.modo === 'dias_semana') {
@@ -191,12 +184,11 @@ export default function CalendarioPage() {
     setGerando(false)
   }
 
-async function criarDemandas() {
+  async function criarDemandas() {
     if (!clienteSelecionado || itens.length === 0) return
     setSalvando(true)
     let criadas = 0
     for (const item of itens) {
-      // Verifica se já existe demanda para este item do calendário
       const { data: existe } = await supabase
         .from('demandas')
         .select('id')
@@ -210,7 +202,7 @@ async function criarDemandas() {
           origem: 'calendario',
           tipo: item.formato || '',
           tema: item.conteudo_nome || '',
-          prazo: item.data,
+          data_publicacao: item.data,
           status: 'a_fazer',
           modelagem: item.modelagem_tipo || '',
           permeabilidade: item.permeabilidade || '',
@@ -224,16 +216,38 @@ async function criarDemandas() {
     setSalvando(false)
   }
 
+  async function apagarCalendario() {
+    if (!clienteSelecionado) return
+    const confirmMsg = `Tem certeza? Isso vai apagar TODOS os itens do calendário e TODAS as demandas de ${MESES[mes]} ${ano} para ${clienteSelecionado.nome}. Essa ação não pode ser desfeita.`
+    if (!confirm(confirmMsg)) return
+
+    const inicio = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
+    const fim = `${ano}-${String(mes + 1).padStart(2, '0')}-${new Date(ano, mes + 1, 0).getDate()}`
+
+    await supabase.from('demandas')
+      .delete()
+      .eq('cliente_id', clienteSelecionado.id)
+      .gte('data_publicacao', inicio)
+      .lte('data_publicacao', fim)
+
+    await supabase.from('calendario')
+      .delete()
+      .eq('cliente_id', clienteSelecionado.id)
+      .gte('data', inicio)
+      .lte('data', fim)
+
+    await carregarCalendario(clienteSelecionado.id, mes, ano)
+    setItemSelecionado(null)
+  }
+
   async function salvarAssunto(itemId, assunto) {
     await supabase.from('calendario').update({ assunto }).eq('id', itemId)
     setItens(prev => prev.map(i => i.id === itemId ? { ...i, assunto } : i))
   }
 
-async function salvarAvulso() {
+  async function salvarAvulso() {
     if (!diaSelecionado || !formAvulso.conteudo_nome.trim()) return
     setSalvando(true)
-    
-    // Salva no calendário
     const { data: itemCalendario } = await supabase.from('calendario').insert({
       ...formAvulso,
       cliente_id: clienteSelecionado.id,
@@ -241,7 +255,6 @@ async function salvarAvulso() {
       origem: 'avulso',
     }).select().single()
 
-    // Cria demanda automaticamente
     if (itemCalendario) {
       await supabase.from('demandas').insert({
         cliente_id: clienteSelecionado.id,
@@ -250,7 +263,7 @@ async function salvarAvulso() {
         origem: 'avulso',
         tipo: formAvulso.formato || '',
         tema: formAvulso.conteudo_nome,
-        prazo: diaSelecionado,
+        data_publicacao: diaSelecionado,
         status: 'a_fazer',
         comentarios: formAvulso.assunto || '',
       })
@@ -302,7 +315,6 @@ async function salvarAvulso() {
       <Sidebar user={user} />
       <main style={{ marginLeft: 220, flex: 1, padding: '40px 48px' }}>
 
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', letterSpacing: 1, marginBottom: 6 }}>ESTRATÉGIA</div>
@@ -311,12 +323,18 @@ async function salvarAvulso() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {temCalendario && (
+              <button onClick={apagarCalendario}
+                style={{ padding: '10px 20px', background: 'none', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                🗑 Apagar calendário
+              </button>
+            )}
+            {temCalendario && (
               <button onClick={criarDemandas} disabled={salvando}
                 style={{ padding: '10px 20px', background: salvando ? '#94a3b8' : '#065f46', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: salvando ? 'not-allowed' : 'pointer' }}>
                 {salvando ? 'Criando...' : '✓ Criar demandas'}
               </button>
             )}
-        {!temCalendario && (
+            {!temCalendario && (
               <button onClick={gerarCalendario} disabled={gerando || !clienteSelecionado}
                 style={{ padding: '10px 20px', background: gerando ? '#94a3b8' : '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: gerando ? 'not-allowed' : 'pointer' }}>
                 {gerando ? 'Gerando...' : '⚡ Gerar calendário'}
@@ -325,7 +343,6 @@ async function salvarAvulso() {
           </div>
         </div>
 
-        {/* Seletor cliente */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           {clientes.map(c => (
             <button key={c.id} onClick={() => selecionarCliente(c)}
@@ -335,7 +352,6 @@ async function salvarAvulso() {
           ))}
         </div>
 
-        {/* Controles mês + legenda */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={() => { const d = new Date(ano, mes - 1, 1); mudarMes(d.getMonth(), d.getFullYear()) }}
@@ -354,7 +370,6 @@ async function salvarAvulso() {
           </div>
         </div>
 
-        {/* Grid calendário */}
         <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e8e4e0', overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1.5px solid #e8e4e0' }}>
             {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => (
@@ -369,7 +384,6 @@ async function salvarAvulso() {
               const hoje = new Date()
               const isHoje = dia && ano === hoje.getFullYear() && mes === hoje.getMonth() && dia === hoje.getDate()
               const dataStr = dia ? `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}` : null
-
               return (
                 <div key={idx} style={{ minHeight: 110, borderRight: '1px solid #f0ece8', borderBottom: '1px solid #f0ece8', padding: '8px', background: !dia ? '#faf8f6' : 'white' }}>
                   {dia && (
@@ -402,7 +416,6 @@ async function salvarAvulso() {
           </div>
         </div>
 
-        {/* Resumo */}
         {temCalendario && (
           <div style={{ marginTop: 16, display: 'flex', gap: 16 }}>
             <div style={{ background: 'white', borderRadius: 10, border: '1.5px solid #e8e4e0', padding: '12px 20px', fontSize: 13, color: '#6b7280' }}>
@@ -421,7 +434,6 @@ async function salvarAvulso() {
         )}
       </main>
 
-      {/* Painel detalhe */}
       {itemSelecionado && (
         <div style={{ width: 380, minHeight: '100vh', background: 'white', borderLeft: '1.5px solid #e8e4e0', position: 'fixed', right: 0, top: 0, bottom: 0, overflowY: 'auto', zIndex: 40 }}>
           <div style={{ padding: '20px 24px', borderBottom: '1px solid #f0ece8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -442,9 +454,8 @@ async function salvarAvulso() {
                 <span style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 6, background: '#f3f4f6', color: '#6b7280' }}>Avulso</span>
               )}
             </div>
-
             {[
-              { label: 'Data', value: new Date(itemSelecionado.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) },
+              { label: 'Data de publicação', value: new Date(itemSelecionado.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) },
               { label: 'Horário', value: itemSelecionado.horario },
               { label: 'Conteúdo', value: itemSelecionado.conteudo_nome },
               { label: 'Formato', value: itemSelecionado.formato },
@@ -456,7 +467,6 @@ async function salvarAvulso() {
                 <div style={{ fontSize: 14, color: '#011d47' }}>{f.value}</div>
               </div>
             ))}
-
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', letterSpacing: 0.5, marginBottom: 6 }}>ASSUNTO / TEMA</div>
               <textarea
@@ -470,7 +480,6 @@ async function salvarAvulso() {
                 style={{ width: '100%', padding: '10px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5, color: '#011d47' }}
               />
             </div>
-
             <button onClick={() => excluirItem(itemSelecionado.id)}
               style={{ width: '100%', padding: '10px', background: 'none', border: '1.5px solid #fecaca', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
               Remover do calendário
@@ -479,7 +488,6 @@ async function salvarAvulso() {
         </div>
       )}
 
-      {/* Modal avulso */}
       {showFormAvulso && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(1,29,71,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
           onClick={e => { if (e.target === e.currentTarget) setShowFormAvulso(false) }}>

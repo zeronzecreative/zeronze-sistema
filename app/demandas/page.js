@@ -29,10 +29,11 @@ export default function DemandasPage() {
   const [detalhe, setDetalhe] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroCliente, setFiltroCliente] = useState('todos')
+  const [visuMode, setVisuMode] = useState('lista') // 'lista' | 'kanban'
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({
     cliente_id: '', origem: 'avulsa', tipo: '', tema: '',
-    copy: '', roteiro: '', prazo: '', status: 'a_fazer',
+    copy: '', roteiro: '', prazo_entrega: '', data_publicacao: '', status: 'a_fazer',
     modelagem: '', permeabilidade: '', conversao_esperada: '',
     link_drive: '', comentarios: '', responsavel_id: ''
   })
@@ -48,10 +49,10 @@ export default function DemandasPage() {
   }, [])
 
   async function carregarDemandas() {
-const { data } = await supabase
+    const { data } = await supabase
       .from('demandas')
       .select('*, clientes(nome), usuarios(nome), redes_sociais(plataforma)')
-      .order('criado_em', { ascending: false })
+      .order('prazo_entrega', { ascending: true, nullsLast: true })
       .limit(500)
     setDemandas(data || [])
     setLoading(false)
@@ -69,7 +70,7 @@ const { data } = await supabase
 
   function abrirNova() {
     setEditando(null)
-    setForm({ cliente_id: clientes[0]?.id || '', origem: 'avulsa', tipo: '', tema: '', copy: '', roteiro: '', prazo: '', status: 'a_fazer', modelagem: '', permeabilidade: '', conversao_esperada: '', link_drive: '', comentarios: '', responsavel_id: '' })
+    setForm({ cliente_id: clientes[0]?.id || '', origem: 'avulsa', tipo: '', tema: '', copy: '', roteiro: '', prazo_entrega: '', data_publicacao: '', status: 'a_fazer', modelagem: '', permeabilidade: '', conversao_esperada: '', link_drive: '', comentarios: '', responsavel_id: '' })
     setShowForm(true)
     setDetalhe(null)
   }
@@ -83,7 +84,8 @@ const { data } = await supabase
     setEditando(d.id)
     setForm({
       cliente_id: d.cliente_id, origem: d.origem, tipo: d.tipo || '', tema: d.tema || '',
-      copy: d.copy || '', roteiro: d.roteiro || '', prazo: d.prazo || '', status: d.status,
+      copy: d.copy || '', roteiro: d.roteiro || '', prazo_entrega: d.prazo_entrega || '',
+      data_publicacao: d.data_publicacao || '', status: d.status,
       modelagem: d.modelagem || '', permeabilidade: d.permeabilidade || '',
       conversao_esperada: d.conversao_esperada || '', link_drive: d.link_drive || '',
       comentarios: d.comentarios || '', responsavel_id: d.responsavel_id || ''
@@ -97,6 +99,8 @@ const { data } = await supabase
     setSalvando(true)
     const dados = { ...form, atualizado_em: new Date().toISOString() }
     if (!dados.responsavel_id) dados.responsavel_id = null
+    if (!dados.prazo_entrega) dados.prazo_entrega = null
+    if (!dados.data_publicacao) dados.data_publicacao = null
     if (editando) {
       await supabase.from('demandas').update(dados).eq('id', editando)
     } else {
@@ -126,6 +130,11 @@ const { data } = await supabase
     return true
   })
 
+  function isPrazoAtrasado(prazo) {
+    if (!prazo) return false
+    return new Date(prazo + 'T12:00:00') < new Date()
+  }
+
   if (!user) return null
 
   return (
@@ -138,15 +147,32 @@ const { data } = await supabase
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', letterSpacing: 1, marginBottom: 6 }}>GESTÃO</div>
             <h1 style={{ fontSize: 26, fontWeight: 700, color: '#011d47' }}>Demandas</h1>
-            <p style={{ fontSize: 14, color: '#6b7280', marginTop: 4 }}>{demandas.length} demanda{demandas.length !== 1 ? 's' : ''} no total</p>
+            <p style={{ fontSize: 14, color: '#6b7280', marginTop: 4 }}>
+              {demandasFiltradas.length} demanda{demandasFiltradas.length !== 1 ? 's' : ''}
+              {filtroCliente !== 'todos' || filtroStatus !== 'todos' ? ' (filtrado)' : ' no total'}
+            </p>
           </div>
-          <button onClick={abrirNova}
-            style={{ padding: '10px 20px', background: '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            + Nova demanda
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {/* Toggle lista/kanban */}
+            <div style={{ display: 'flex', background: 'white', border: '1.5px solid #e8e4e0', borderRadius: 10, padding: 4, gap: 4 }}>
+              <button onClick={() => setVisuMode('lista')}
+                style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, background: visuMode === 'lista' ? '#011d47' : 'transparent', color: visuMode === 'lista' ? 'white' : '#6b7280' }}>
+                ☰ Lista
+              </button>
+              <button onClick={() => setVisuMode('kanban')}
+                style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, background: visuMode === 'kanban' ? '#011d47' : 'transparent', color: visuMode === 'kanban' ? 'white' : '#6b7280' }}>
+                ⊞ Kanban
+              </button>
+            </div>
+            <button onClick={abrirNova}
+              style={{ padding: '10px 20px', background: '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              + Nova demanda
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+        {/* Filtros */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
           <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
             style={{ padding: '8px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 13, background: 'white', outline: 'none', color: '#011d47' }}>
             <option value="todos">Todos os status</option>
@@ -159,9 +185,10 @@ const { data } = await supabase
           </select>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+        {/* Contadores por status — agora usa demandasFiltradas */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
           {Object.entries(STATUS).map(([k, v]) => {
-            const count = demandas.filter(d => d.status === k).length
+            const count = demandasFiltradas.filter(d => d.status === k).length
             return (
               <div key={k} onClick={() => setFiltroStatus(filtroStatus === k ? 'todos' : k)}
                 style={{ padding: '8px 16px', borderRadius: 8, background: filtroStatus === k ? v.bg : 'white', border: `1.5px solid ${filtroStatus === k ? v.color + '40' : '#e8e4e0'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -172,63 +199,113 @@ const { data } = await supabase
           })}
         </div>
 
-        {demandasFiltradas.length === 0 ? (
-          <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e8e4e0', padding: '64px 32px', textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#011d47', marginBottom: 6 }}>Nenhuma demanda encontrada</div>
-            <div style={{ fontSize: 14, color: '#6b7280' }}>Crie uma nova demanda ou ajuste os filtros.</div>
-          </div>
-        ) : (
-          <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e8e4e0', overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr 1fr 1fr', padding: '12px 24px', borderBottom: '1px solid #f0ece8', background: '#faf8f6' }}>
-              {['Demanda', 'Cliente', 'Responsável', 'Status', 'Prazo', 'Ações'].map(h => (
-                <div key={h} style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', letterSpacing: 0.5 }}>{h.toUpperCase()}</div>
-              ))}
+        {/* VISUALIZAÇÃO LISTA */}
+        {visuMode === 'lista' && (
+          demandasFiltradas.length === 0 ? (
+            <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e8e4e0', padding: '64px 32px', textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#011d47', marginBottom: 6 }}>Nenhuma demanda encontrada</div>
+              <div style={{ fontSize: 14, color: '#6b7280' }}>Crie uma nova demanda ou ajuste os filtros.</div>
             </div>
-            {demandasFiltradas.map((d, i) => (
-              <div key={d.id}
-                style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr 1fr 1fr', padding: '16px 24px', borderBottom: i < demandasFiltradas.length - 1 ? '1px solid #f5f3f1' : 'none', alignItems: 'center', cursor: 'pointer', transition: 'background 0.1s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#faf8f6'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                onClick={() => abrirDetalhe(d)}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#011d47' }}>{d.tema || 'Sem título'}</div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                    {d.redes_sociais?.plataforma && <span style={{ fontSize: 11, fontWeight: 600, color: '#011d47', background: '#eff6ff', padding: '2px 8px', borderRadius: 4 }}>{d.redes_sociais.plataforma}</span>}
-
-                    {d.tipo && <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 8px', borderRadius: 4 }}>{d.tipo}</span>}
-                    {d.modelagem && MODELAGEM[d.modelagem] && (
-                      <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 4, background: MODELAGEM[d.modelagem].bg, color: MODELAGEM[d.modelagem].color }}>{MODELAGEM[d.modelagem].label}</span>
-                    )}
+          ) : (
+            <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e8e4e0', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr 1fr 1fr 1fr', padding: '12px 24px', borderBottom: '1px solid #f0ece8', background: '#faf8f6' }}>
+                {['Demanda', 'Cliente', 'Responsável', 'Status', 'Prazo entrega', 'Publicação', 'Ações'].map(h => (
+                  <div key={h} style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', letterSpacing: 0.5 }}>{h.toUpperCase()}</div>
+                ))}
+              </div>
+              {demandasFiltradas.map((d, i) => (
+                <div key={d.id}
+                  style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr 1fr 1fr 1fr', padding: '16px 24px', borderBottom: i < demandasFiltradas.length - 1 ? '1px solid #f5f3f1' : 'none', alignItems: 'center', cursor: 'pointer', transition: 'background 0.1s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#faf8f6'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => abrirDetalhe(d)}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#011d47' }}>{d.tema || 'Sem título'}</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                      {d.redes_sociais?.plataforma && <span style={{ fontSize: 11, fontWeight: 600, color: '#011d47', background: '#eff6ff', padding: '2px 8px', borderRadius: 4 }}>{d.redes_sociais.plataforma}</span>}
+                      {d.tipo && <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 8px', borderRadius: 4 }}>{d.tipo}</span>}
+                      {d.modelagem && MODELAGEM[d.modelagem] && (
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 4, background: MODELAGEM[d.modelagem].bg, color: MODELAGEM[d.modelagem].color }}>{MODELAGEM[d.modelagem].label}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>{d.clientes?.nome || '—'}</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>{d.usuarios?.nome || '—'}</div>
+                  <div onClick={e => e.stopPropagation()}>
+                    <select value={d.status} onChange={e => atualizarStatus(d.id, e.target.value)}
+                      style={{ padding: '4px 10px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 500, background: STATUS[d.status]?.bg, color: STATUS[d.status]?.color, cursor: 'pointer', outline: 'none' }}>
+                      {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ fontSize: 13, color: isPrazoAtrasado(d.prazo_entrega) ? '#dc2626' : '#6b7280', fontWeight: isPrazoAtrasado(d.prazo_entrega) ? 600 : 400 }}>
+                    {d.prazo_entrega ? new Date(d.prazo_entrega + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                  </div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>
+                    {d.data_publicacao ? new Date(d.data_publicacao + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => abrirEditar(d)}
+                      style={{ padding: '5px 12px', background: 'none', border: '1.5px solid #e8e4e0', borderRadius: 6, fontSize: 12, fontWeight: 500, color: '#011d47', cursor: 'pointer' }}>
+                      Editar
+                    </button>
+                    <button onClick={() => excluir(d.id)}
+                      style={{ padding: '5px 10px', background: 'none', border: '1.5px solid #e8e4e0', borderRadius: 6, fontSize: 12, color: '#9ca3af', cursor: 'pointer' }}>
+                      ×
+                    </button>
                   </div>
                 </div>
-                <div style={{ fontSize: 13, color: '#6b7280' }}>{d.clientes?.nome || '—'}</div>
-                <div style={{ fontSize: 13, color: '#6b7280' }}>{d.usuarios?.nome || '—'}</div>
-                <div onClick={e => e.stopPropagation()}>
-                  <select value={d.status} onChange={e => atualizarStatus(d.id, e.target.value)}
-                    style={{ padding: '4px 10px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 500, background: STATUS[d.status]?.bg, color: STATUS[d.status]?.color, cursor: 'pointer', outline: 'none' }}>
-                    {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
+              ))}
+            </div>
+          )
+        )}
+
+        {/* VISUALIZAÇÃO KANBAN */}
+        {visuMode === 'kanban' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, alignItems: 'start' }}>
+            {Object.entries(STATUS).map(([statusKey, statusInfo]) => {
+              const demandasColuna = demandasFiltradas.filter(d => d.status === statusKey)
+              return (
+                <div key={statusKey}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: statusInfo.color }}>{statusInfo.label.toUpperCase()}</span>
+                    <span style={{ fontSize: 11, background: statusInfo.bg, color: statusInfo.color, padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{demandasColuna.length}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {demandasColuna.length === 0 ? (
+                      <div style={{ background: 'white', borderRadius: 10, border: '1.5px dashed #e8e4e0', padding: '20px', textAlign: 'center', color: '#d1d5db', fontSize: 12 }}>
+                        Vazio
+                      </div>
+                    ) : demandasColuna.map(d => (
+                      <div key={d.id} onClick={() => abrirDetalhe(d)}
+                        style={{ background: 'white', borderRadius: 10, border: '1.5px solid #e8e4e0', padding: '14px', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = '#011d47'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = '#e8e4e0'}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#011d47', marginBottom: 8 }}>{d.tema || 'Sem título'}</div>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                          {d.redes_sociais?.plataforma && <span style={{ fontSize: 10, fontWeight: 600, color: '#011d47', background: '#eff6ff', padding: '2px 6px', borderRadius: 3 }}>{d.redes_sociais.plataforma}</span>}
+                          {d.modelagem && MODELAGEM[d.modelagem] && <span style={{ fontSize: 10, fontWeight: 500, padding: '2px 6px', borderRadius: 3, background: MODELAGEM[d.modelagem].bg, color: MODELAGEM[d.modelagem].color }}>{MODELAGEM[d.modelagem].label}</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#9ca3af' }}>{d.clientes?.nome}</div>
+                        {d.prazo_entrega && (
+                          <div style={{ fontSize: 11, marginTop: 6, fontWeight: 600, color: isPrazoAtrasado(d.prazo_entrega) ? '#dc2626' : '#6b7280' }}>
+                            📅 {new Date(d.prazo_entrega + 'T12:00:00').toLocaleDateString('pt-BR')}
+                          </div>
+                        )}
+                        {d.usuarios?.nome && (
+                          <div style={{ fontSize: 11, marginTop: 4, color: '#9ca3af' }}>👤 {d.usuarios.nome}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, color: d.prazo && new Date(d.prazo) < new Date() ? '#dc2626' : '#6b7280' }}>
-                  {d.prazo ? new Date(d.prazo + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
-                </div>
-                <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => abrirEditar(d)}
-                    style={{ padding: '5px 12px', background: 'none', border: '1.5px solid #e8e4e0', borderRadius: 6, fontSize: 12, fontWeight: 500, color: '#011d47', cursor: 'pointer' }}>
-                    Editar
-                  </button>
-                  <button onClick={() => excluir(d.id)}
-                    style={{ padding: '5px 10px', background: 'none', border: '1.5px solid #e8e4e0', borderRadius: 6, fontSize: 12, color: '#9ca3af', cursor: 'pointer' }}>
-                    ×
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </main>
 
+      {/* Painel detalhe */}
       {detalhe && (
         <div style={{ width: 420, minHeight: '100vh', background: 'white', borderLeft: '1.5px solid #e8e4e0', position: 'fixed', right: 0, top: 0, bottom: 0, overflowY: 'auto', zIndex: 40 }}>
           <div style={{ padding: '24px 28px', borderBottom: '1px solid #f0ece8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -243,9 +320,11 @@ const { data } = await supabase
             </div>
             {[
               { label: 'Cliente', value: detalhe.clientes?.nome },
+              { label: 'Rede Social', value: detalhe.redes_sociais?.plataforma },
               { label: 'Responsável', value: detalhe.usuarios?.nome },
               { label: 'Tipo', value: detalhe.tipo },
-              { label: 'Prazo', value: detalhe.prazo ? new Date(detalhe.prazo + 'T12:00:00').toLocaleDateString('pt-BR') : null },
+              { label: 'Prazo de entrega', value: detalhe.prazo_entrega ? new Date(detalhe.prazo_entrega + 'T12:00:00').toLocaleDateString('pt-BR') : null },
+              { label: 'Data de publicação', value: detalhe.data_publicacao ? new Date(detalhe.data_publicacao + 'T12:00:00').toLocaleDateString('pt-BR') : null },
               { label: 'Permeabilidade', value: detalhe.permeabilidade },
               { label: 'Conversão esperada', value: detalhe.conversao_esperada },
             ].filter(f => f.value).map(f => (
@@ -289,6 +368,7 @@ const { data } = await supabase
         </div>
       )}
 
+      {/* Modal form */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(1,29,71,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
@@ -311,7 +391,7 @@ const { data } = await supabase
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>ORIGEM</label>
                   <select value={form.origem} onChange={e => setForm({ ...form, origem: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}>
-                    <option value="avulsa">Avulsa / Sazonal</option>
+                    <option value="avulso">Avulsa / Sazonal</option>
                     <option value="calendario">Calendário editorial</option>
                   </select>
                 </div>
@@ -321,9 +401,7 @@ const { data } = await supabase
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>TEMA / ASSUNTO *</label>
                 <input value={form.tema} onChange={e => setForm({ ...form, tema: e.target.value })}
                   placeholder="Ex: Você Sabia — mercado imobiliário em SP"
-                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}
-                  onFocus={e => e.target.style.borderColor = '#011d47'}
-                  onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
@@ -331,9 +409,7 @@ const { data } = await supabase
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>TIPO</label>
                   <input value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}
                     placeholder="Ex: Reels, Carrossel"
-                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}
-                    onFocus={e => e.target.style.borderColor = '#011d47'}
-                    onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>MODELAGEM</label>
@@ -357,7 +433,7 @@ const { data } = await supabase
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>STATUS</label>
                   <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
@@ -366,11 +442,14 @@ const { data } = await supabase
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>PRAZO</label>
-                  <input type="date" value={form.prazo} onChange={e => setForm({ ...form, prazo: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}
-                    onFocus={e => e.target.style.borderColor = '#011d47'}
-                    onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>PRAZO ENTREGA</label>
+                  <input type="date" value={form.prazo_entrega} onChange={e => setForm({ ...form, prazo_entrega: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>DATA PUBLICAÇÃO</label>
+                  <input type="date" value={form.data_publicacao} onChange={e => setForm({ ...form, data_publicacao: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>RESPONSÁVEL</label>
@@ -386,45 +465,35 @@ const { data } = await supabase
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>CONVERSÃO ESPERADA</label>
                 <input value={form.conversao_esperada} onChange={e => setForm({ ...form, conversao_esperada: e.target.value })}
                   placeholder="Ex: Seguidores, Salvamentos, Leads"
-                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}
-                  onFocus={e => e.target.style.borderColor = '#011d47'}
-                  onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>COPY / LEGENDA</label>
                 <textarea value={form.copy} onChange={e => setForm({ ...form, copy: e.target.value })}
                   placeholder="Texto final do post..." rows={4}
-                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }}
-                  onFocus={e => e.target.style.borderColor = '#011d47'}
-                  onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }} />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>ROTEIRO / BRIEFING</label>
                 <textarea value={form.roteiro} onChange={e => setForm({ ...form, roteiro: e.target.value })}
                   placeholder="Direcionamento de gravação ou produção..." rows={4}
-                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }}
-                  onFocus={e => e.target.style.borderColor = '#011d47'}
-                  onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }} />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>LINK GOOGLE DRIVE</label>
                 <input value={form.link_drive} onChange={e => setForm({ ...form, link_drive: e.target.value })}
                   placeholder="https://drive.google.com/..."
-                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}
-                  onFocus={e => e.target.style.borderColor = '#011d47'}
-                  onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>COMENTÁRIOS</label>
                 <textarea value={form.comentarios} onChange={e => setForm({ ...form, comentarios: e.target.value })}
                   placeholder="Observações internas..." rows={3}
-                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }}
-                  onFocus={e => e.target.style.borderColor = '#011d47'}
-                  onBlur={e => e.target.style.borderColor = '#e8e4e0'} />
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }} />
               </div>
 
               <div style={{ display: 'flex', gap: 10, paddingTop: 8 }}>
