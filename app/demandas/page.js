@@ -6,8 +6,10 @@ import Sidebar from '../components/Sidebar'
 
 const STATUS = {
   a_fazer: { label: 'A fazer', color: '#6b7280', bg: '#f3f4f6' },
+  aguardando_gravacao: { label: 'Aguardando gravação', color: '#b45309', bg: '#fff7ed' },
   em_producao: { label: 'Em produção', color: '#92400e', bg: '#fffbeb' },
-  em_revisao: { label: 'Em revisão', color: '#1d4ed8', bg: '#eff6ff' },
+  aguardando_revisao: { label: 'Aguardando revisão', color: '#1d4ed8', bg: '#eff6ff' },
+  alteracao: { label: 'Alteração', color: '#dc2626', bg: '#fef2f2' },
   aprovado: { label: 'Aprovado', color: '#065f46', bg: '#ecfdf5' },
   programado: { label: 'Programado', color: '#6b21a8', bg: '#faf5ff' },
 }
@@ -19,6 +21,8 @@ const MODELAGEM = {
   misto: { label: 'Misto', color: '#6b21a8', bg: '#faf5ff' },
 }
 
+const ADMINS = ['contato@zeronzecreative.com.br', 'guilherme@zeronzecreative.com.br']
+
 export default function DemandasPage() {
   const [user, setUser] = useState(null)
   const [demandas, setDemandas] = useState([])
@@ -26,11 +30,14 @@ export default function DemandasPage() {
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showAtribuicao, setShowAtribuicao] = useState(false)
   const [detalhe, setDetalhe] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroCliente, setFiltroCliente] = useState('todos')
-  const [visuMode, setVisuMode] = useState('lista') // 'lista' | 'kanban'
+  const [visuMode, setVisuMode] = useState('lista')
   const [editando, setEditando] = useState(null)
+  const [atribuicaoForm, setAtribuicaoForm] = useState({ prazo_entrega: '', responsavel_id: '' })
+  const [atribuindo, setAtribuindo] = useState(false)
   const [form, setForm] = useState({
     cliente_id: '', origem: 'avulsa', tipo: '', tema: '',
     copy: '', roteiro: '', prazo_entrega: '', data_publicacao: '', status: 'a_fazer',
@@ -124,6 +131,22 @@ export default function DemandasPage() {
     setDetalhe(null)
   }
 
+  async function atribuirEmMassa() {
+    if (!atribuicaoForm.prazo_entrega && !atribuicaoForm.responsavel_id) return
+    setAtribuindo(true)
+    const update = { atualizado_em: new Date().toISOString() }
+    if (atribuicaoForm.prazo_entrega) update.prazo_entrega = atribuicaoForm.prazo_entrega
+    if (atribuicaoForm.responsavel_id) update.responsavel_id = atribuicaoForm.responsavel_id
+    for (const d of demandasFiltradas) {
+      await supabase.from('demandas').update(update).eq('id', d.id)
+    }
+    await carregarDemandas()
+    setShowAtribuicao(false)
+    setAtribuicaoForm({ prazo_entrega: '', responsavel_id: '' })
+    setAtribuindo(false)
+    alert(`${demandasFiltradas.length} demanda${demandasFiltradas.length !== 1 ? 's' : ''} atualizadas!`)
+  }
+
   const demandasFiltradas = demandas.filter(d => {
     if (filtroStatus !== 'todos' && d.status !== filtroStatus) return false
     if (filtroCliente !== 'todos' && d.cliente_id !== filtroCliente) return false
@@ -134,6 +157,8 @@ export default function DemandasPage() {
     if (!prazo) return false
     return new Date(prazo + 'T12:00:00') < new Date()
   }
+
+  const isAdmin = ADMINS.includes(user?.email)
 
   if (!user) return null
 
@@ -152,8 +177,7 @@ export default function DemandasPage() {
               {filtroCliente !== 'todos' || filtroStatus !== 'todos' ? ' (filtrado)' : ' no total'}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {/* Toggle lista/kanban */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div style={{ display: 'flex', background: 'white', border: '1.5px solid #e8e4e0', borderRadius: 10, padding: 4, gap: 4 }}>
               <button onClick={() => setVisuMode('lista')}
                 style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, background: visuMode === 'lista' ? '#011d47' : 'transparent', color: visuMode === 'lista' ? 'white' : '#6b7280' }}>
@@ -164,6 +188,12 @@ export default function DemandasPage() {
                 ⊞ Kanban
               </button>
             </div>
+            {isAdmin && (
+              <button onClick={() => { setAtribuicaoForm({ prazo_entrega: '', responsavel_id: '' }); setShowAtribuicao(true) }}
+                style={{ padding: '10px 18px', background: 'none', color: '#011d47', border: '1.5px solid #011d47', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                ⚡ Atribuição em massa
+              </button>
+            )}
             <button onClick={abrirNova}
               style={{ padding: '10px 20px', background: '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               + Nova demanda
@@ -185,7 +215,7 @@ export default function DemandasPage() {
           </select>
         </div>
 
-        {/* Contadores por status — agora usa demandasFiltradas */}
+        {/* Contadores */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
           {Object.entries(STATUS).map(([k, v]) => {
             const count = demandasFiltradas.filter(d => d.status === k).length
@@ -199,7 +229,7 @@ export default function DemandasPage() {
           })}
         </div>
 
-        {/* VISUALIZAÇÃO LISTA */}
+        {/* LISTA */}
         {visuMode === 'lista' && (
           demandasFiltradas.length === 0 ? (
             <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e8e4e0', padding: '64px 32px', textAlign: 'center' }}>
@@ -260,7 +290,7 @@ export default function DemandasPage() {
           )
         )}
 
-        {/* VISUALIZAÇÃO KANBAN */}
+        {/* KANBAN */}
         {visuMode === 'kanban' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, alignItems: 'start' }}>
             {Object.entries(STATUS).map(([statusKey, statusInfo]) => {
@@ -377,7 +407,6 @@ export default function DemandasPage() {
               <h2 style={{ fontSize: 20, fontWeight: 700, color: '#011d47' }}>{editando ? 'Editar demanda' : 'Nova demanda'}</h2>
             </div>
             <div style={{ padding: '24px 40px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>CLIENTE *</label>
@@ -396,14 +425,12 @@ export default function DemandasPage() {
                   </select>
                 </div>
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>TEMA / ASSUNTO *</label>
                 <input value={form.tema} onChange={e => setForm({ ...form, tema: e.target.value })}
                   placeholder="Ex: Você Sabia — mercado imobiliário em SP"
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>TIPO</label>
@@ -432,7 +459,6 @@ export default function DemandasPage() {
                   </select>
                 </div>
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>STATUS</label>
@@ -460,42 +486,36 @@ export default function DemandasPage() {
                   </select>
                 </div>
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>CONVERSÃO ESPERADA</label>
                 <input value={form.conversao_esperada} onChange={e => setForm({ ...form, conversao_esperada: e.target.value })}
                   placeholder="Ex: Seguidores, Salvamentos, Leads"
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>COPY / LEGENDA</label>
                 <textarea value={form.copy} onChange={e => setForm({ ...form, copy: e.target.value })}
                   placeholder="Texto final do post..." rows={4}
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }} />
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>ROTEIRO / BRIEFING</label>
                 <textarea value={form.roteiro} onChange={e => setForm({ ...form, roteiro: e.target.value })}
                   placeholder="Direcionamento de gravação ou produção..." rows={4}
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }} />
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>LINK GOOGLE DRIVE</label>
                 <input value={form.link_drive} onChange={e => setForm({ ...form, link_drive: e.target.value })}
                   placeholder="https://drive.google.com/..."
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>COMENTÁRIOS</label>
                 <textarea value={form.comentarios} onChange={e => setForm({ ...form, comentarios: e.target.value })}
                   placeholder="Observações internas..." rows={3}
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6', resize: 'vertical', lineHeight: 1.5 }} />
               </div>
-
               <div style={{ display: 'flex', gap: 10, paddingTop: 8 }}>
                 <button onClick={() => setShowForm(false)}
                   style={{ flex: 1, padding: '11px', background: 'none', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, cursor: 'pointer', color: '#6b7280', fontWeight: 500 }}>
@@ -506,6 +526,48 @@ export default function DemandasPage() {
                   {salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Criar demanda'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal atribuição em massa */}
+      {showAtribuicao && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(1,29,71,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowAtribuicao(false) }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 40, width: '100%', maxWidth: 460, boxShadow: '0 25px 60px rgba(1,29,71,0.25)' }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#011d47', marginBottom: 8 }}>Atribuição em massa</h2>
+            <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 24 }}>
+              Aplica para <strong style={{ color: '#011d47' }}>{demandasFiltradas.length} demanda{demandasFiltradas.length !== 1 ? 's' : ''}</strong> atualmente filtradas.
+              {filtroCliente !== 'todos' && (
+                <span> Cliente: <strong style={{ color: '#011d47' }}>{clientes.find(c => c.id === filtroCliente)?.nome}</strong></span>
+              )}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>PRAZO DE ENTREGA</label>
+                <input type="date" value={atribuicaoForm.prazo_entrega} onChange={e => setAtribuicaoForm({ ...atribuicaoForm, prazo_entrega: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }} />
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Deixe em branco para não alterar</div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#011d47', marginBottom: 6, letterSpacing: 0.3 }}>RESPONSÁVEL</label>
+                <select value={atribuicaoForm.responsavel_id} onChange={e => setAtribuicaoForm({ ...atribuicaoForm, responsavel_id: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, outline: 'none', background: '#faf8f6' }}>
+                  <option value="">— Não alterar —</option>
+                  {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 28 }}>
+              <button onClick={() => setShowAtribuicao(false)}
+                style={{ flex: 1, padding: '11px', background: 'none', border: '1.5px solid #e8e4e0', borderRadius: 8, fontSize: 14, cursor: 'pointer', color: '#6b7280' }}>
+                Cancelar
+              </button>
+              <button onClick={atribuirEmMassa} disabled={atribuindo || (!atribuicaoForm.prazo_entrega && !atribuicaoForm.responsavel_id)}
+                style={{ flex: 2, padding: '11px', background: atribuindo || (!atribuicaoForm.prazo_entrega && !atribuicaoForm.responsavel_id) ? '#94a3b8' : '#011d47', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                {atribuindo ? 'Aplicando...' : `Aplicar para ${demandasFiltradas.length} demandas`}
+              </button>
             </div>
           </div>
         </div>
